@@ -19,7 +19,6 @@ export class ScraperProcessor
     });
   }
 
-  // Executa quando a aplicação é encerrada
   async onModuleDestroy() {
     if (this.browser) {
       await this.browser.close();
@@ -36,14 +35,37 @@ export class ScraperProcessor
 
     try {
       // Navega até a URL com um timeout configurado (evita travar em páginas lentas)
+      await page.waitForTimeout(Math.random() * 2000);
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForSelector('h1', { timeout: 15000 });
+      const imageLocator = page.locator('img[src*="ifood-static"]').first();
+      const hasImage = (await imageLocator.count()) > 0;
+      const imageUrl = hasImage ? await imageLocator.getAttribute('src') : null;
+      let normalPrice: string | null = null;
+      let discountPrice: string | null = null;
 
-      // TODO: Aqui entrará a lógica dos seletores CSS para extrair:
-      const title = 'TODO: Extrair título';
-      const normalPrice = 'TODO: Extrair preço normal';
-      const discountPrice = null;
-      const imageUrl = 'TODO: Extrair imagem';
+      const priceElements = await page
+        .locator('text=/R\\$\\s*\\d+(?:,\\d{2})?/')
+        .allTextContents();
 
+      if (priceElements.length > 0) {
+        const cleanPrices = priceElements.map((p) =>
+          p.replace(/\s+/g, ' ').trim(),
+        );
+
+        if (cleanPrices.length === 1) {
+          normalPrice = cleanPrices[0];
+        } else if (cleanPrices.length >= 2) {
+          normalPrice = cleanPrices[0];
+          discountPrice = cleanPrices[1];
+        }
+      }
+
+      const title = await page
+        .locator('h1')
+        .first()
+        .textContent()
+        .then((t) => t?.trim() || null);
       const result = {
         title,
         normal_price: normalPrice,
@@ -54,6 +76,7 @@ export class ScraperProcessor
         error_message: null,
       };
       this.logger.log(`Sucesso ao extrair dados do job ${job.id}`);
+      this.logger.log(`Resultado: ${JSON.stringify(result)}`);
       return result;
     } catch (error) {
       this.logger.error(`Erro ao processar a URL ${url}: ${error.message}`);

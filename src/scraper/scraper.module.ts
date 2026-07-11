@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { ScraperProcessor } from './scraper.processor';
 
-@Module({})
+@Module({
+  providers: [ScraperProcessor],
+})
 export class ScraperModule {}
