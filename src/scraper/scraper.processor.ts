@@ -14,7 +14,7 @@ export class ScraperProcessor
   async onModuleInit() {
     this.logger.log('Iniciando o navegador (Playwright)...');
     this.browser = await chromium.launch({
-      headless: true,
+      headless: false,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
   }
@@ -26,17 +26,16 @@ export class ScraperProcessor
     }
   }
 
-  async process(job: Job<{ url: string }>, token?: string): Promise<any> {
+  async process(job: Job<{ url: string }>): Promise<any> {
     const { url } = job.data;
     this.logger.log(`Processando job ${job.id} - URL: ${url}`);
 
     const context = await this.browser.newContext();
     const page = await context.newPage();
-
     try {
       // Navega até a URL com um timeout configurado (evita travar em páginas lentas)
       await page.waitForTimeout(Math.random() * 2000);
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
       await page.waitForSelector('h1', { timeout: 15000 });
       const imageLocator = page.locator('img[src*="ifood-static"]').first();
       const hasImage = (await imageLocator.count()) > 0;
@@ -44,28 +43,27 @@ export class ScraperProcessor
       let normalPrice: string | null = null;
       let discountPrice: string | null = null;
 
-      const priceElements = await page
-        .locator('text=/R\\$\\s*\\d+(?:,\\d{2})?/')
+      const prices = await page
+        .locator('.product-card__price')
         .allTextContents();
 
-      if (priceElements.length > 0) {
-        const cleanPrices = priceElements.map((p) =>
-          p.replace(/\s+/g, ' ').trim(),
-        );
+      const cleanPrices = prices.map((price) =>
+        price.replace(/\s+/g, ' ').trim(),
+      );
 
-        if (cleanPrices.length === 1) {
-          normalPrice = cleanPrices[0];
-        } else if (cleanPrices.length >= 2) {
-          normalPrice = cleanPrices[0];
-          discountPrice = cleanPrices[1];
-        }
+      if (cleanPrices.length === 1) {
+        normalPrice = cleanPrices[0];
+      } else if (cleanPrices.length >= 2) {
+        normalPrice = cleanPrices[0];
+        discountPrice = cleanPrices[1];
       }
 
+      console.log({ normalPrice, discountPrice });
+
       const title = await page
-        .locator('h1')
+        .locator('.product-detail__description')
         .first()
-        .textContent()
-        .then((t) => t?.trim() || null);
+        .textContent();
       const result = {
         title,
         normal_price: normalPrice,
