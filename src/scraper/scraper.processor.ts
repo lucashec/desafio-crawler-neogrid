@@ -6,6 +6,13 @@ import { isAxiosError } from 'axios';
 
 const NOT_FOUND_MESSAGE = 'produto indisponivel ou pagina nao carregada';
 
+// Distribui ~1000 requisicoes em 30min (1800s) com jitter para reduzir risco de rate limit/bloqueio.
+// Media de 1.8s por requisicao, variando entre 1.1s e 2.5s (uniforme).
+const AVERAGE_DELAY_MS = 2250;
+const JITTER_MS = 1750;
+const MIN_DELAY_MS = AVERAGE_DELAY_MS - JITTER_MS;
+const MAX_DELAY_MS = AVERAGE_DELAY_MS + JITTER_MS;
+
 export interface ScrapeResult {
   title: string | null;
   normal_price: number | null;
@@ -18,7 +25,6 @@ export interface ScrapeResult {
 
 @Processor('scraper-queue', {
   concurrency: 1,
-  limiter: { max: 1, duration: 2000 },
 })
 export class ScraperProcessor extends WorkerHost {
   private readonly logger = new Logger(ScraperProcessor.name);
@@ -34,6 +40,14 @@ export class ScraperProcessor extends WorkerHost {
       throw new Error('URL inválida');
     }
     return `https://www.ifood.com.br/site-api/v1/merchants/restaurant/${match[1]}/items/${match[2]}`;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private getJitteredDelayMs(): number {
+    return MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS);
   }
 
   private buildNotFoundResult(url: string): ScrapeResult {
@@ -52,9 +66,11 @@ export class ScraperProcessor extends WorkerHost {
     job: Job<{ url: string; headers: Record<string, string> }>,
   ): Promise<ScrapeResult> {
     const { url, headers } = job.data;
+    const delayMs = this.getJitteredDelayMs();
     this.logger.log(
-      `Processando job ${job.id} (tentativa ${job.attemptsMade + 1}) - URL: ${url}`,
+      `Processando job ${job.id} (tentativa ${job.attemptsMade + 1}) - URL: ${url} - aguardando ${Math.round(delayMs)}ms (jitter)`,
     );
+    await this.sleep(delayMs);
     try {
       const response = await this.http.axiosRef.get<{
         data: {
@@ -89,6 +105,9 @@ export class ScraperProcessor extends WorkerHost {
         this.logger.warn(`Produto não encontrado (404) - URL: ${url}`);
         return this.buildNotFoundResult(url);
       }
+      console.log(err.response?.status);
+      console.log(err.response?.headers);
+      console.log(err.response?.data);
       throw err instanceof Error
         ? err
         : new Error('Erro desconhecido ao processar produto');
