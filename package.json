@@ -28,11 +28,13 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.4.5",
     "axios": "^1.18.1",
+    "axios-cookiejar-support": "^7.0.0",
     "bullmq": "^5.80.1",
     "ioredis": "^5.10.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
+    "tough-cookie": "^6.0.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

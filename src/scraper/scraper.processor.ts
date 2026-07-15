@@ -2,12 +2,12 @@ import { HttpService } from '@nestjs/axios';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { isAxiosError } from 'axios';
+import { isAxiosError, type AxiosRequestConfig } from 'axios';
+import { wrapper } from 'axios-cookiejar-support';
+import { CookieJar } from 'tough-cookie';
 
 const NOT_FOUND_MESSAGE = 'produto indisponivel ou pagina nao carregada';
 
-// Distribui ~1000 requisicoes em 30min (1800s) com jitter para reduzir risco de rate limit/bloqueio.
-// Media de 1.8s por requisicao, variando entre 1.1s e 2.5s (uniforme).
 const AVERAGE_DELAY_MS = 2250;
 const JITTER_MS = 1750;
 const MIN_DELAY_MS = AVERAGE_DELAY_MS - JITTER_MS;
@@ -28,8 +28,11 @@ export interface ScrapeResult {
 })
 export class ScraperProcessor extends WorkerHost {
   private readonly logger = new Logger(ScraperProcessor.name);
+  private readonly cookieJar = new CookieJar();
+
   constructor(private readonly http: HttpService) {
     super();
+    wrapper(this.http.axiosRef);
   }
 
   private buildApiUrl(url: string) {
@@ -84,7 +87,9 @@ export class ScraperProcessor extends WorkerHost {
         };
       }>(this.buildApiUrl(url), {
         headers,
-      });
+        withCredentials: true,
+        jar: this.cookieJar,
+      } as AxiosRequestConfig & { jar: CookieJar });
       if (!response.data?.data.menu) {
         this.logger.warn(`Produto não encontrado - URL: ${url}`);
         return this.buildNotFoundResult(url);
