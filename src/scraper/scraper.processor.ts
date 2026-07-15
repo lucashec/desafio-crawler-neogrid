@@ -1,94 +1,80 @@
+import { HttpService } from '@nestjs/axios';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { chromium, Browser } from 'playwright';
+import { StorageService } from 'src/storage/storage.service';
 
 @Processor('scraper-queue', { concurrency: 5 })
-export class ScraperProcessor
-  extends WorkerHost
-  implements OnModuleInit, OnModuleDestroy
-{
+export class ScraperProcessor extends WorkerHost {
   private readonly logger = new Logger(ScraperProcessor.name);
-  private browser: Browser;
+  constructor(
+    private readonly http: HttpService,
+    private readonly storageService: StorageService,
+  ) {
+    super();
+  }
 
-  async onModuleInit() {
-    this.logger.log('Iniciando o navegador (Playwright)...');
-    this.browser = await chromium.launch({
-      headless: false,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  private buildApiUrl(url: string) {
+    const regex =
+      /\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\?item=([0-9a-f-]{36})/i;
+    const match = url.match(regex);
+    if (!match) {
+      throw new Error('URL inválida');
+    }
+    return `https://www.ifood.com.br/site-api/v1/merchants/restaurant/${match[1]}/items/${match[2]}`;
+  }
+
+  delay(): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, 2000); // 2000 ms = 2 segundos
     });
   }
 
-  async onModuleDestroy() {
-    if (this.browser) {
-      await this.browser.close();
-      this.logger.log('Navegador encerrado.');
-    }
-  }
-
-  async process(job: Job<{ url: string }>): Promise<any> {
-    const { url } = job.data;
+  async process(job: Job<{ url: string; headers: any }>): Promise<any> {
+    const { url, headers } = job.data;
     this.logger.log(`Processando job ${job.id} - URL: ${url}`);
-
-    const context = await this.browser.newContext();
-    const page = await context.newPage();
     try {
-      // Navega até a URL com um timeout configurado (evita travar em páginas lentas)
-      await page.waitForTimeout(Math.random() * 2000);
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-      await page.waitForSelector('h1', { timeout: 15000 });
-      const imageLocator = page.locator('img[src*="ifood-static"]').first();
-      const hasImage = (await imageLocator.count()) > 0;
-      const imageUrl = hasImage ? await imageLocator.getAttribute('src') : null;
-      let normalPrice: string | null = null;
-      let discountPrice: string | null = null;
-
-      const prices = await page
-        .locator('.product-card__price')
-        .allTextContents();
-
-      const cleanPrices = prices.map((price) =>
-        price.replace(/\s+/g, ' ').trim(),
-      );
-
-      if (cleanPrices.length === 1) {
-        normalPrice = cleanPrices[0];
-      } else if (cleanPrices.length >= 2) {
-        normalPrice = cleanPrices[0];
-        discountPrice = cleanPrices[1];
+      await this.delay();
+      const response: {
+        data: {
+          data: {
+            menu: {
+              itens: {
+                description: string;
+                unitPrice: number;
+                logoUrl: string;
+              }[];
+            }[];
+          };
+        };
+      } = await this.http.axiosRef.get(this.buildApiUrl(url), {
+        headers,
+      });
+      if (!response.data?.data.menu) {
+        console.log(response.data?.data);
+        throw new NotFoundException('nao encontrado');
       }
-
-      console.log({ normalPrice, discountPrice });
-
-      const title = await page
-        .locator('.product-detail__description')
-        .first()
-        .textContent();
-      const result = {
-        title,
-        normal_price: normalPrice,
-        discount_price: discountPrice,
+      const item = response.data.data.menu[0].itens[0];
+      console.log(item.description);
+      this.storageService.addResult({
+        title: item.description,
+        normal_price: item.unitPrice,
+        discount_price: null,
         product_url: url,
-        image_url: imageUrl,
-        status: 'success',
+        image_url: `https://static.ifood-static.com.br/image/upload/t_high/pratos/${item.logoUrl}`,
+        status: 'sucess',
         error_message: null,
-      };
-      this.logger.log(`Sucesso ao extrair dados do job ${job.id}`);
-      this.logger.log(`Resultado: ${JSON.stringify(result)}`);
-      return result;
-    } catch (error) {
-      this.logger.error(`Erro ao processar a URL ${url}: ${error.message}`);
-      return {
+      });
+    } catch (err) {
+      this.storageService.addResult({
         title: null,
         normal_price: null,
         discount_price: null,
         product_url: url,
         image_url: null,
         status: 'error',
-        error_message: error.message,
-      };
-    } finally {
-      await context.close();
+        error_message: 'Produto indisponivel ou pagina nao carregada',
+      });
     }
   }
 }

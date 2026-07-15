@@ -7,6 +7,7 @@ import { Module } from '@nestjs/common';
       name: 'scraper-queue',
       defaultJobOptions: {
         attempts: 3,
+        delay: 2000,
         backoff: {
           type: 'exponential',
           delay: 2000,
