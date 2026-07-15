@@ -1,41 +1,51 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
+import Redis from 'ioredis';
+import { ScrapeResult } from 'src/scraper/scraper.processor';
+
+export const REDIS_CLIENT = 'REDIS_CLIENT';
+
+const RESULTS_KEY = 'scraper:results';
+const META_KEY = 'scraper:meta';
 
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
-  private results: any[] = [];
-  private startTime: number;
 
-  startTracking(totalUrls: number) {
-    this.results = [];
-    this.startTime = Date.now();
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
+
+  async startTracking(totalUrls: number) {
+    await this.redis.del(RESULTS_KEY);
+    await this.redis.hset(META_KEY, {
+      total: totalUrls,
+      startTime: Date.now(),
+    });
     this.logger.log(`Iniciando rastreamento para ${totalUrls} URLs...`);
   }
 
-  addResult(data: any) {
-    this.results.push(data);
+  async addResult(data: ScrapeResult) {
+    await this.redis.hset(RESULTS_KEY, data.product_url, JSON.stringify(data));
   }
 
   async exportData() {
-    if (this.results.length === 0) return;
+    const rawResults = await this.redis.hgetall(RESULTS_KEY);
+    const results = Object.values(rawResults).map(
+      (value) => JSON.parse(value) as ScrapeResult,
+    );
 
-    const total = this.results.length;
-    const successes = this.results.filter((r) => r.status === 'success').length;
+    if (results.length === 0) return;
+
+    const meta = await this.redis.hgetall(META_KEY);
+    const startTime = meta.startTime ? Number(meta.startTime) : Date.now();
+
+    const total = results.length;
+    const successes = results.filter((r) => r.status === 'success').length;
     const failures = total - successes;
     const successRate = ((successes / total) * 100).toFixed(2);
-    const executionTimeMinutes = (
-      (Date.now() - this.startTime) /
-      60000
-    ).toFixed(2);
+    const executionTimeMinutes = ((Date.now() - startTime) / 60000).toFixed(2);
 
-    // Gerando o arquivo products_output.json
     const fileName = 'products_output.json';
-    await fs.writeFile(
-      fileName,
-      JSON.stringify(this.results, null, 2),
-      'utf-8',
-    );
+    await fs.writeFile(fileName, JSON.stringify(results, null, 2), 'utf-8');
 
     this.logger.log('--- RESUMO DA EXECUÇÃO ---');
     this.logger.log(`Total de URLs processadas: ${total}`);
@@ -45,5 +55,7 @@ export class StorageService {
     this.logger.log(`Tempo total de execução: ${executionTimeMinutes} minutos`);
     this.logger.log(`Arquivo salvo como: ${fileName}`);
     this.logger.log('--------------------------');
+
+    await this.redis.del(RESULTS_KEY, META_KEY);
   }
 }
