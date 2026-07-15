@@ -3,34 +3,39 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import * as XLSX from 'xlsx';
+import { StorageService } from 'src/storage/storage.service';
 
 @Injectable()
 export class FilesInputService {
   constructor(
     @InjectQueue('scraper-queue') private readonly scraperQueue: Queue,
+    private readonly storageService: StorageService,
   ) {}
   async reset() {
     return await this.scraperQueue.obliterate({ force: true });
   }
-  parseHeaders(text: string): Record<string, string> {
-    return text
-      .split('\n')
-      .filter(Boolean)
-      .reduce(
-        (acc, line) => {
-          const index = line.indexOf(':');
+  parseHeaders(curl: string): Record<string, string> {
+    const headers: Record<string, string> = {};
 
-          if (index === -1) return acc;
+    const regex = /-(H|b)\s+['"]([^'"]+)['"]/g;
 
-          const key = line.slice(0, index).trim();
-          const value = line.slice(index + 1).trim();
+    let match: RegExpExecArray | null;
 
-          acc[key] = value;
+    while ((match = regex.exec(curl)) !== null) {
+      const [, type, value] = match;
 
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
+      if (type === 'b') {
+        headers.Cookie = value;
+        continue;
+      }
+
+      const index = value.indexOf(':');
+      if (index === -1) continue;
+
+      headers[value.slice(0, index).trim()] = value.slice(index + 1).trim();
+    }
+
+    return headers;
   }
   async processFiles(
     xlsxFile: Express.Multer.File,
@@ -47,6 +52,7 @@ export class FilesInputService {
     const data = XLSX.utils.sheet_to_json(worksheet);
 
     const urls = data.map((row: any) => row.url || row.URL).filter(Boolean);
+    await this.storageService.startTracking(urls.length);
     await this.scraperQueue.addBulk(
       urls.map((url) => ({
         name: 'scrape-product',

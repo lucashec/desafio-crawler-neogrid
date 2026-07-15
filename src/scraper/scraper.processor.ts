@@ -1,16 +1,28 @@
 import { HttpService } from '@nestjs/axios';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger, NotFoundException } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { StorageService } from 'src/storage/storage.service';
+import { isAxiosError } from 'axios';
 
-@Processor('scraper-queue', { concurrency: 5 })
+const NOT_FOUND_MESSAGE = 'produto indisponivel ou pagina nao carregada';
+
+export interface ScrapeResult {
+  title: string | null;
+  normal_price: number | null;
+  discount_price: number | null;
+  product_url: string;
+  image_url: string | null;
+  status: 'success' | 'error';
+  error_message: string | null;
+}
+
+@Processor('scraper-queue', {
+  concurrency: 1,
+  limiter: { max: 1, duration: 2000 },
+})
 export class ScraperProcessor extends WorkerHost {
   private readonly logger = new Logger(ScraperProcessor.name);
-  constructor(
-    private readonly http: HttpService,
-    private readonly storageService: StorageService,
-  ) {
+  constructor(private readonly http: HttpService) {
     super();
   }
 
@@ -24,57 +36,62 @@ export class ScraperProcessor extends WorkerHost {
     return `https://www.ifood.com.br/site-api/v1/merchants/restaurant/${match[1]}/items/${match[2]}`;
   }
 
-  delay(): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(resolve, 2000); // 2000 ms = 2 segundos
-    });
+  private buildNotFoundResult(url: string): ScrapeResult {
+    return {
+      title: null,
+      normal_price: null,
+      discount_price: null,
+      product_url: url,
+      image_url: null,
+      status: 'success',
+      error_message: NOT_FOUND_MESSAGE,
+    };
   }
 
-  async process(job: Job<{ url: string; headers: any }>): Promise<any> {
+  async process(
+    job: Job<{ url: string; headers: Record<string, string> }>,
+  ): Promise<ScrapeResult> {
     const { url, headers } = job.data;
-    this.logger.log(`Processando job ${job.id} - URL: ${url}`);
+    this.logger.log(
+      `Processando job ${job.id} (tentativa ${job.attemptsMade + 1}) - URL: ${url}`,
+    );
     try {
-      await this.delay();
-      const response: {
+      const response = await this.http.axiosRef.get<{
         data: {
-          data: {
-            menu: {
-              itens: {
-                description: string;
-                unitPrice: number;
-                logoUrl: string;
-              }[];
+          menu: {
+            itens: {
+              description: string;
+              unitPrice: number;
+              logoUrl: string;
             }[];
-          };
+          }[];
         };
-      } = await this.http.axiosRef.get(this.buildApiUrl(url), {
+      }>(this.buildApiUrl(url), {
         headers,
       });
       if (!response.data?.data.menu) {
-        console.log(response.data?.data);
-        throw new NotFoundException('nao encontrado');
+        this.logger.warn(`Produto não encontrado - URL: ${url}`);
+        return this.buildNotFoundResult(url);
       }
       const item = response.data.data.menu[0].itens[0];
-      console.log(item.description);
-      this.storageService.addResult({
+      console.log(response.data?.data?.menu[0]?.itens[0]?.description);
+      return {
         title: item.description,
         normal_price: item.unitPrice,
         discount_price: null,
         product_url: url,
         image_url: `https://static.ifood-static.com.br/image/upload/t_high/pratos/${item.logoUrl}`,
-        status: 'sucess',
+        status: 'success',
         error_message: null,
-      });
+      };
     } catch (err) {
-      this.storageService.addResult({
-        title: null,
-        normal_price: null,
-        discount_price: null,
-        product_url: url,
-        image_url: null,
-        status: 'error',
-        error_message: 'Produto indisponivel ou pagina nao carregada',
-      });
+      if (isAxiosError(err) && err.response?.status === 404) {
+        this.logger.warn(`Produto não encontrado (404) - URL: ${url}`);
+        return this.buildNotFoundResult(url);
+      }
+      throw err instanceof Error
+        ? err
+        : new Error('Erro desconhecido ao processar produto');
     }
   }
 }
