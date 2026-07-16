@@ -8,6 +8,15 @@ async function bootstrap() {
     .setTitle('Neogrid Crawler API')
     .setDescription('Documentação da API')
     .setVersion('1.0')
+    .addApiKey(
+      {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-api-key',
+        description: 'Chave de acesso da API',
+      },
+      'x-api-key',
+    )
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
