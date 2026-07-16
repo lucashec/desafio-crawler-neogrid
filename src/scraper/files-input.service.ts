@@ -37,11 +37,7 @@ export class FilesInputService {
 
     return headers;
   }
-  async processFiles(
-    xlsxFile: Express.Multer.File,
-    headersFile: Express.Multer.File,
-  ) {
-    const headers = this.parseHeaders(headersFile.buffer.toString('utf8'));
+  async processFiles(xlsxFile: Express.Multer.File) {
     const workbook = XLSX.read(xlsxFile.buffer, {
       type: 'buffer',
     });
@@ -58,7 +54,6 @@ export class FilesInputService {
         name: 'scrape-product',
         data: {
           url,
-          headers,
         },
       })),
     );

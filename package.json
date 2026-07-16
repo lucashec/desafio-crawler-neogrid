@@ -31,6 +31,7 @@
     "axios-cookiejar-support": "^7.0.0",
     "bullmq": "^5.80.1",
     "ioredis": "^5.10.1",
+    "playwright": "^1.61.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",

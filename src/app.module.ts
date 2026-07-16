@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { QueueModule } from './queue/queue.module';
 import { ScraperModule } from './scraper/scraper.module';
 import { StorageModule } from './storage/storage.module';
+import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 
@@ -19,6 +20,7 @@ import { BullModule } from '@nestjs/bullmq';
     QueueModule,
     ScraperModule,
     StorageModule,
+    AuthModule,
   ],
   controllers: [],
 })
