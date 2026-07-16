@@ -7,7 +7,7 @@ import {
 import { Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { StorageService } from '../storage/storage.service';
-import { ScrapeResult } from '../scraper/scraper.processor';
+import { ScrapeResult } from 'src/scraper/scraper.types';
 
 @QueueEventsListener('scraper-queue')
 export class ScraperQueueEvents extends QueueEventsHost {

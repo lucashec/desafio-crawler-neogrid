@@ -5,6 +5,7 @@ import { Job, Queue } from 'bullmq';
 import { isAxiosError, type AxiosRequestConfig } from 'axios';
 import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
+import { ScrapeApiResult, ScrapeResult } from './scraper.types';
 
 const NOT_FOUND_MESSAGE = 'produto indisponivel ou pagina nao carregada';
 
@@ -14,16 +15,6 @@ const MIN_DELAY_MS = AVERAGE_DELAY_MS - JITTER_MS;
 const MAX_DELAY_MS = AVERAGE_DELAY_MS + JITTER_MS;
 
 const MAX_CONSECUTIVE_FORBIDDEN = 5;
-
-export interface ScrapeResult {
-  title: string | null;
-  normal_price: number | null;
-  discount_price: number | null;
-  product_url: string;
-  image_url: string | null;
-  status: 'success' | 'error';
-  error_message: string | null;
-}
 
 @Processor('scraper-queue', {
   concurrency: 1,
@@ -49,7 +40,7 @@ export class ScraperProcessor extends WorkerHost {
     }
     await this.scraperQueue.pause();
     this.logger.error(
-      `Circuit breaker acionado: ${this.consecutiveForbiddenCount} respostas 403 consecutivas do iFood. ` +
+      `Circuit breaker acionado: ${this.consecutiveForbiddenCount} respostas 403 consecutivas do servidor. ` +
         'Fila pausada para evitar banimento definitivo. Os jobs pendentes foram preservados. ' +
         'Faça login novamente, gere um novo curl/headers e reenvie via upload para retomar o processamento.',
     );
@@ -62,7 +53,7 @@ export class ScraperProcessor extends WorkerHost {
     if (!match) {
       throw new Error('URL inválida');
     }
-    return `https://www.ifood.com.br/site-api/v1/merchants/restaurant/${match[1]}/items/${match[2]}`;
+    return `${process.env.SCRAPING_REFERENCE_API}$/${match[1]}/${process.env.SCRAPING_RESOURCE}/${match[2]}`;
   }
 
   private sleep(ms: number): Promise<void> {
@@ -95,34 +86,26 @@ export class ScraperProcessor extends WorkerHost {
     );
     await this.sleep(delayMs);
     try {
-      const response = await this.http.axiosRef.get<{
-        data: {
-          menu: {
-            itens: {
-              description: string;
-              unitPrice: number;
-              logoUrl: string;
-            }[];
-          }[];
-        };
-      }>(this.buildApiUrl(url), {
-        headers,
-        withCredentials: true,
-        jar: this.cookieJar,
-      } as AxiosRequestConfig & { jar: CookieJar });
+      const response = await this.http.axiosRef.get<ScrapeApiResult>(
+        this.buildApiUrl(url),
+        {
+          headers,
+          withCredentials: true,
+          jar: this.cookieJar,
+        } as AxiosRequestConfig & { jar: CookieJar },
+      );
       this.consecutiveForbiddenCount = 0;
       if (!response.data?.data.menu) {
         this.logger.warn(`Produto não encontrado - URL: ${url}`);
         return this.buildNotFoundResult(url);
       }
       const item = response.data.data.menu[0].itens[0];
-      console.log(response.data?.data?.menu[0]?.itens[0]?.description);
       return {
         title: item.description,
         normal_price: item.unitPrice,
         discount_price: null,
         product_url: url,
-        image_url: `https://static.ifood-static.com.br/image/upload/t_high/pratos/${item.logoUrl}`,
+        image_url: `${process.env.SCRAPING_CDN_RESOURCE}/${item.logoUrl}`,
         status: 'success',
         error_message: null,
       };
@@ -141,9 +124,7 @@ export class ScraperProcessor extends WorkerHost {
           await this.triggerCircuitBreaker();
         }
       }
-      console.log(err.response?.status);
-      console.log(err.response?.headers);
-      console.log(err.response?.data);
+      this.logger.error(err.response?.data);
       throw err instanceof Error
         ? err
         : new Error('Erro desconhecido ao processar produto');
