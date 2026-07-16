@@ -4,6 +4,7 @@ import { ScraperModule } from './scraper/scraper.module';
 import { StorageModule } from './storage/storage.module';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { BullModule } from '@nestjs/bullmq';
     QueueModule,
     ScraperModule,
     StorageModule,
+    AuthModule,
   ],
   controllers: [],
 })
