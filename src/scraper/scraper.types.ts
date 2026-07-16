@@ -8,6 +8,11 @@ export interface ScrapeResult {
   error_message: string | null;
 }
 
+export interface ScrapeJobData {
+  url: string;
+  headers: Record<string, string>;
+}
+
 export interface ScrapeApiResult {
   data: {
     menu: {

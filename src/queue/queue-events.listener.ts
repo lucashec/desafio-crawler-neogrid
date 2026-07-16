@@ -7,7 +7,7 @@ import {
 import { Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { StorageService } from '../storage/storage.service';
-import { ScrapeResult } from 'src/scraper/scraper.types';
+import { ScrapeJobData, ScrapeResult } from '../scraper/scraper.types';
 
 @QueueEventsListener('scraper-queue')
 export class ScraperQueueEvents extends QueueEventsHost {
@@ -16,10 +16,7 @@ export class ScraperQueueEvents extends QueueEventsHost {
   constructor(
     private readonly storageService: StorageService,
     @InjectQueue('scraper-queue')
-    private readonly scraperQueue: Queue<{
-      url: string;
-      headers: Record<string, string>;
-    }>,
+    private readonly scraperQueue: Queue<ScrapeJobData>,
   ) {
     super();
   }

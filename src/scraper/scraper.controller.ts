@@ -3,9 +3,8 @@ import {
   Post,
   UploadedFiles,
   UploadedFile,
-  Headers,
   UseInterceptors,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import {
   FileFieldsInterceptor,
@@ -13,12 +12,14 @@ import {
 } from '@nestjs/platform-express';
 import { FilesInputService } from './files-input.service';
 import { ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiKeyGuard } from '../auth/guards/api-key.guard';
 
 @Controller('scraper')
 export class ScraperController {
   constructor(private readonly filesInputService: FilesInputService) {}
 
   @Post('upload')
+  @UseGuards(ApiKeyGuard)
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -43,16 +44,12 @@ export class ScraperController {
     ]),
   )
   async upload(
-    @Headers('X_API_Key') apiKey: string,
     @UploadedFiles()
     files: {
       xlsx?: Express.Multer.File[];
       headers?: Express.Multer.File[];
     },
   ) {
-    if (apiKey !== process.env.X_API_KEY) {
-      throw new UnauthorizedException('API Key inválida');
-    }
     const xlsxFile = files.xlsx?.[0];
     const headersFile = files.headers?.[0];
 
@@ -67,12 +64,8 @@ export class ScraperController {
     };
   }
 
-  @Post()
-  async reset() {
-    await this.filesInputService.reset();
-  }
-
   @Post('resume')
+  @UseGuards(ApiKeyGuard)
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -87,14 +80,7 @@ export class ScraperController {
     },
   })
   @UseInterceptors(FileInterceptor('headers'))
-  async resume(
-    @Headers('X_API_Key') apiKey: string,
-    @UploadedFile() headersFile?: Express.Multer.File,
-  ) {
-    if (apiKey !== process.env.X_API_KEY) {
-      throw new UnauthorizedException('API Key inválida');
-    }
-
+  async resume(@UploadedFile() headersFile?: Express.Multer.File) {
     if (!headersFile) {
       throw new Error('O arquivo de headers é obrigatório');
     }
