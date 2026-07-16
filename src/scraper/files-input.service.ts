@@ -2,9 +2,11 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import * as XLSX from 'xlsx';
-import { StorageService } from 'src/storage/storage.service';
 import { CurlHeadersParser } from './curl-headers.parser';
 import { ScrapeJobData } from './scraper.types';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import * as multer from 'multer';
+import { StorageService } from '../storage/storage.service';
 
 interface ProductSheetRow {
   url?: string;

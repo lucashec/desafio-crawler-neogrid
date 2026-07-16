@@ -30,7 +30,7 @@ describe('FilesInputService', () => {
 
     service = new FilesInputService(
       queue as never,
-      storageService as never,
+      storageService,
       curlHeadersParser,
     );
   });

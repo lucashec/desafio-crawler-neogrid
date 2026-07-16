@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import Redis from 'ioredis';
-import { ScrapeResult } from 'src/scraper/scraper.types';
+import { ScrapeResult } from '../scraper/scraper.types';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 
