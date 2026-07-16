@@ -11,8 +11,8 @@ import {
   FileInterceptor,
 } from '@nestjs/platform-express';
 import { FilesInputService } from './files-input.service';
-import { ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { ApiKeyGuard } from '../auth/guards/api-key.guard';
+import { ApiConsumes, ApiBody, ApiSecurity } from '@nestjs/swagger';
+import { ApiKeyGuard, AUTH_HEADER_NAME } from '../auth/guards/api-key.guard';
 
 @Controller('scraper')
 export class ScraperController {
@@ -21,6 +21,7 @@ export class ScraperController {
   @Post('upload')
   @UseGuards(ApiKeyGuard)
   @ApiConsumes('multipart/form-data')
+  @ApiSecurity(AUTH_HEADER_NAME)
   @ApiBody({
     schema: {
       type: 'object',
@@ -52,7 +53,6 @@ export class ScraperController {
   ) {
     const xlsxFile = files.xlsx?.[0];
     const headersFile = files.headers?.[0];
-
     if (!xlsxFile || !headersFile) {
       throw new Error('Os dois arquivos são obrigatórios');
     }
@@ -66,6 +66,7 @@ export class ScraperController {
 
   @Post('resume')
   @UseGuards(ApiKeyGuard)
+  @ApiSecurity(AUTH_HEADER_NAME)
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
