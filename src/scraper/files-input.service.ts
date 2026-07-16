@@ -14,6 +14,25 @@ export class FilesInputService {
   async reset() {
     return await this.scraperQueue.obliterate({ force: true });
   }
+  async updateHeadersAndResume(headersFile: Express.Multer.File) {
+    const headers = this.parseHeaders(headersFile.buffer.toString('utf8'));
+
+    const jobs = await this.scraperQueue.getJobs([
+      'waiting',
+      'delayed',
+      'paused',
+      'active',
+      'prioritized',
+    ]);
+
+    await Promise.all(
+      jobs.map((job) => job.updateData({ ...job.data, headers })),
+    );
+
+    await this.scraperQueue.resume();
+
+    return jobs.length;
+  }
   parseHeaders(curl: string): Record<string, string> {
     const headers: Record<string, string> = {};
 

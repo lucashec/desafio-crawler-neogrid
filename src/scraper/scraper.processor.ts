@@ -1,7 +1,7 @@
 import { HttpService } from '@nestjs/axios';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import { Job } from 'bullmq';
+import { Job, Queue } from 'bullmq';
 import { isAxiosError, type AxiosRequestConfig } from 'axios';
 import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
@@ -12,6 +12,8 @@ const AVERAGE_DELAY_MS = 2250;
 const JITTER_MS = 1750;
 const MIN_DELAY_MS = AVERAGE_DELAY_MS - JITTER_MS;
 const MAX_DELAY_MS = AVERAGE_DELAY_MS + JITTER_MS;
+
+const MAX_CONSECUTIVE_FORBIDDEN = 5;
 
 export interface ScrapeResult {
   title: string | null;
@@ -29,10 +31,28 @@ export interface ScrapeResult {
 export class ScraperProcessor extends WorkerHost {
   private readonly logger = new Logger(ScraperProcessor.name);
   private readonly cookieJar = new CookieJar();
+  private consecutiveForbiddenCount = 0;
 
-  constructor(private readonly http: HttpService) {
+  constructor(
+    private readonly http: HttpService,
+    @InjectQueue('scraper-queue')
+    private readonly scraperQueue: Queue,
+  ) {
     super();
     wrapper(this.http.axiosRef);
+  }
+
+  private async triggerCircuitBreaker(): Promise<void> {
+    const isPaused = await this.scraperQueue.isPaused();
+    if (isPaused) {
+      return;
+    }
+    await this.scraperQueue.pause();
+    this.logger.error(
+      `Circuit breaker acionado: ${this.consecutiveForbiddenCount} respostas 403 consecutivas do iFood. ` +
+        'Fila pausada para evitar banimento definitivo. Os jobs pendentes foram preservados. ' +
+        'Faça login novamente, gere um novo curl/headers e reenvie via upload para retomar o processamento.',
+    );
   }
 
   private buildApiUrl(url: string) {
@@ -90,6 +110,7 @@ export class ScraperProcessor extends WorkerHost {
         withCredentials: true,
         jar: this.cookieJar,
       } as AxiosRequestConfig & { jar: CookieJar });
+      this.consecutiveForbiddenCount = 0;
       if (!response.data?.data.menu) {
         this.logger.warn(`Produto não encontrado - URL: ${url}`);
         return this.buildNotFoundResult(url);
@@ -107,8 +128,18 @@ export class ScraperProcessor extends WorkerHost {
       };
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 404) {
+        this.consecutiveForbiddenCount = 0;
         this.logger.warn(`Produto não encontrado (404) - URL: ${url}`);
         return this.buildNotFoundResult(url);
+      }
+      if (isAxiosError(err) && err.response?.status === 403) {
+        this.consecutiveForbiddenCount += 1;
+        this.logger.warn(
+          `Resposta 403 (bloqueio) recebida - URL: ${url} - ocorrências consecutivas: ${this.consecutiveForbiddenCount}/${MAX_CONSECUTIVE_FORBIDDEN}`,
+        );
+        if (this.consecutiveForbiddenCount >= MAX_CONSECUTIVE_FORBIDDEN) {
+          await this.triggerCircuitBreaker();
+        }
       }
       console.log(err.response?.status);
       console.log(err.response?.headers);
