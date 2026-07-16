@@ -29,6 +29,8 @@ COPY --from=builder /app/dist ./dist
 
 RUN addgroup -S nest && adduser -S nest -G nest
 
+RUN chown -R nest:nest /app
+
 USER nest
 
 EXPOSE 3000
