@@ -36,7 +36,8 @@ ___
 ## Execução 
 
 O Swagger estará disponível no endpoint abaixo:
-```http
+
+```
 http://localhost:3000/docs
 ```
 
