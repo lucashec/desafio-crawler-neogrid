@@ -127,4 +127,4 @@ ___
 
 ## Melhorias futuras
 * Persistir o estado do Circuit Breaker no redis, em vez de utilizar uma variável de instância.
-* Observabilidade com Promotheus, com health-check dedicado, estado da fila (ativa/pausada) e integração com alertas via email, webhook ou Slack.
+* Observabilidade com Prometheus, com health-check dedicado, estado da fila (ativa/pausada) e integração com alertas via email, webhook ou Slack.
