@@ -37,7 +37,7 @@ ___
 
 O Swagger estará disponível no endpoint abaixo:
 ```http
-http://localhost:3000/docs#/
+http://localhost:3000/docs
 ```
 
 Os endpoints utilizam um chave enviada através do header:
