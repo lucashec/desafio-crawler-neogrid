@@ -103,7 +103,9 @@ ___
 
 ## Estratégia do crawler
 
-A solução tem como base o Axios para a execução das requests na API do iFood, reaproveitando uma sessão gerada via navegador, replicando os headers para se manter autenticado. O JSON da resposta é interceptado e explorado para a obtenção dos dados.
+A solução tem como base o Axios para a execução das requests na API do iFood, reaproveitando uma sessão gerada via navegador, replicando os headers para se manter autenticado. O JSON da resposta é interceptado e explorado para a obtenção dos dados. Um jitter é aplicado para gerar um intervalo aleatório entre as requests, com intuito de evitar um banimento precoce 
+do servidor. Também considerei utilizar a rotação de User Agent no header, mas o fingerprint
+gerado no cookie é sofisticado e combina vários aspectos do dispositivo, gerando assim, uma fácil detecção de automação, e por consequência, uma revogação da autorização.
 
 ___
 
