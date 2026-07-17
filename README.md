@@ -52,7 +52,9 @@ o nome **Authorize**.
 No endpoint **/upload** são exigidos 2 arquivos, o **.xlsx** com as urls a serem buscadas 
 e um **.txt** com o cURL gerado pela request da front do iFood na api. Ele pode ser obtido
 pelo DevTools, filtre pela request que tem o UUID do produto como identificador e selecione
-a opção de copiar com cURL.
+a opção de copiar com cURL. Como no exemplo da imagem abaixo:
+
+![](/resultados/curl.png)
 
 O endpoint /resume é útil para os casos em que os cookies são inválidados pelo servidor e as 
 requests começam a retornar 403. Nesse caso, uma lógica de Circuit Breaker é  acionada, onde os jobs são paralisados e podem ser retomados através desse endpoint com o envio de um novo cURL
